@@ -110,6 +110,17 @@ const typeColor = (type, th) => {
   return { bg:"#2e2e1e", text:"#e8e49a" };
 };
 
+const levelColor = (level) => {
+  const l = (level || "").toUpperCase().trim();
+  if (l === "A1") return { bg:"#1e3a1e", text:"#7acc7a" };
+  if (l === "A2") return { bg:"#1e3020", text:"#6abf6a" };
+  if (l === "B1") return { bg:"#1e2e3a", text:"#7ab0e8" };
+  if (l === "B2") return { bg:"#1a2a3d", text:"#5a9ad8" };
+  if (l === "C1") return { bg:"#3a2a1e", text:"#e8a96e" };
+  if (l === "C2") return { bg:"#3d1e2e", text:"#e87ab0" };
+  return { bg:"#2a2a2a", text:"#888" };
+};
+
 // ── Speak Button ──────────────────────────────────────────────────────────────
 function SpeakBtn({ text, size = 13 }) {
   const [speaking, setSpeaking] = useState(false);
@@ -339,7 +350,7 @@ export default function App() {
     setDbLoading(true);
     try {
       const data = await sbFetch(`/rest/v1/vocabulary?user_id=eq.${userId}&select=*&order=added_at.desc`);
-      setWords((data||[]).map(w => ({ id:w.id, word:w.word, translation:w.translation, type:w.type, explanation:w.explanation, sentences:w.sentences, mastered:w.mastered, addedAt:w.added_at })));
+      setWords((data||[]).map(w => ({ id:w.id, word:w.word, translation:w.translation, type:w.type, level:w.level||'', explanation:w.explanation, sentences:w.sentences, mastered:w.mastered, addedAt:w.added_at })));
     } catch(e) { console.error(e); }
     setDbLoading(false);
   }, [userId]);
@@ -377,9 +388,9 @@ export default function App() {
   };
 
   const saveWord = async (finalWord, ai) => {
-    const result = await sbFetch("/rest/v1/vocabulary", { method:"POST", body:JSON.stringify({ user_id:userId, word:finalWord, translation:ai.translation, type:ai.type, explanation:ai.explanation, sentences:ai.sentences, mastered:false }) });
+    const result = await sbFetch("/rest/v1/vocabulary", { method:"POST", body:JSON.stringify({ user_id:userId, word:finalWord, translation:ai.translation, type:ai.type, level:ai.level||"", explanation:ai.explanation, sentences:ai.sentences, mastered:false }) });
     const inserted = Array.isArray(result) ? result[0] : result;
-    setWords(prev => [{ id:inserted.id, word:inserted.word, translation:inserted.translation, type:inserted.type, explanation:inserted.explanation, sentences:inserted.sentences, mastered:inserted.mastered, addedAt:inserted.added_at }, ...prev]);
+    setWords(prev => [{ id:inserted.id, word:inserted.word, translation:inserted.translation, type:inserted.type, level:inserted.level||'', explanation:inserted.explanation, sentences:inserted.sentences, mastered:inserted.mastered, addedAt:inserted.added_at }, ...prev]);
     setInput(""); setExpandedId(inserted.id); setSuggestion(null);
   };
 
@@ -494,6 +505,7 @@ export default function App() {
                     <span style={{ fontSize:16, color:w.mastered?th.textFaint:th.text, textDecoration:w.mastered?"line-through":"none" }}>{w.word}</span>
                     <SpeakBtn text={w.word} size={13} />
                     <span style={{ fontSize:9, padding:"2px 6px", borderRadius:3, background:tc.bg, color:tc.text, letterSpacing:"0.08em", textTransform:"uppercase", fontFamily:"sans-serif" }}>{w.type}</span>
+                    {w.level && (() => { const lc = levelColor(w.level); return <span style={{ fontSize:9, padding:"2px 7px", borderRadius:3, background:lc.bg, color:lc.text, letterSpacing:"0.1em", fontFamily:"sans-serif", fontWeight:"bold" }}>{w.level}</span>; })()}
                   </div>
                   <div style={{ fontSize:12, color:th.textMuted, marginTop:2 }}>{w.translation}</div>
                 </div>
