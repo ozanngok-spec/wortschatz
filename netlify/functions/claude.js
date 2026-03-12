@@ -6,7 +6,7 @@ export default async (req) => {
   try {
     const { word } = await req.json();
 
-    const prompt = `You are a German language teacher helping a C1 level student. For the German word or expression: "${word}" Return ONLY a JSON object (no markdown, no backticks, no explanation) in this exact format: {"translation":"English translation","type":"Nomen / Verb / Ausdruck / Adjektiv / Adverb / etc","explanation":"Kurze Erklaerung auf Deutsch in 1-2 Saetzen: Was bedeutet dieses Wort und wie wird es verwendet?","sentences":[{"german":"Erster Beispielsatz auf Deutsch","english":"English translation"},{"german":"Zweiter Beispielsatz in einem anderen Kontext","english":"English translation"},{"german":"Dritter Beispielsatz","english":"English translation"}]}`;
+    const prompt = `You are a German language teacher helping a C1 level student. The user typed: "${word}". First, correct any spelling mistakes and return the properly formatted German word or expression. Return ONLY a JSON object (no markdown, no backticks, no explanation) in this exact format: {"word":"corrected and properly formatted German word or expression","translation":"English translation","type":"Nomen / Verb / Ausdruck / Adjektiv / Adverb / etc","explanation":"Kurze Erklaerung auf Deutsch in 1-2 Saetzen: Was bedeutet dieses Wort und wie wird es verwendet?","sentences":[{"german":"Erster Beispielsatz auf Deutsch","english":"English translation"},{"german":"Zweiter Beispielsatz in einem anderen Kontext","english":"English translation"},{"german":"Dritter Beispielsatz","english":"English translation"}]}`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
