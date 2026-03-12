@@ -4,7 +4,10 @@ export default async (req) => {
   }
 
   try {
-    const body = await req.json();
+    const { word } = await req.json();
+
+    const prompt = `You are a German language teacher helping a C1 level student. For the German word or expression: "${word}" Return ONLY a JSON object (no markdown, no backticks, no explanation) in this exact format: {"translation":"English translation","type":"Nomen / Verb / Ausdruck / Adjektiv / Adverb / etc","explanation":"Kurze Erklaerung auf Deutsch in 1-2 Saetzen: Was bedeutet dieses Wort und wie wird es verwendet?","sentences":[{"german":"Erster Beispielsatz auf Deutsch","english":"English translation"},{"german":"Zweiter Beispielsatz in einem anderen Kontext","english":"English translation"},{"german":"Dritter Beispielsatz","english":"English translation"}]}`;
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -12,12 +15,27 @@ export default async (req) => {
         "x-api-key": process.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01"
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
     });
 
     const data = await response.json();
-    return new Response(JSON.stringify(data), {
-      status: response.status,
+
+    if (!response.ok) {
+      return new Response(JSON.stringify(data), {
+        status: response.status,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const text = data.content.map(i => i.text || "").join("");
+    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
+    return new Response(JSON.stringify(parsed), {
+      status: 200,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*"
