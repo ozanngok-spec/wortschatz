@@ -66,30 +66,6 @@ function PinScreen({ onEnter }) {
         </button>
         <p style={{ color:"#3a3830", fontSize:11, marginTop:16, lineHeight:1.6 }}>Your PIN is hashed — never stored in plain text. Don't forget it.</p>
       </div>
-
-      {/* Delete Confirmation Popup */}
-      {deleteConfirmId && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 }}
-          onClick={() => setDeleteConfirmId(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#141210", border:"1px solid #2a2820", borderRadius:10, padding:"28px 32px", maxWidth:340, width:"90%", textAlign:"center", fontFamily:"'Palatino Linotype',Palatino,serif" }}>
-            <div style={{ fontSize:22, marginBottom:12 }}>🗑️</div>
-            <p style={{ color:"#e8e0d0", fontSize:15, marginBottom:6 }}>
-              <strong>{words.find(w => w.id === deleteConfirmId)?.word}</strong>
-            </p>
-            <p style={{ color:"#6b6456", fontSize:13, lineHeight:1.6, marginBottom:24 }}>
-              Möchtest du dieses Wort wirklich löschen? Das kann nicht rückgängig gemacht werden.
-            </p>
-            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-              <button onClick={() => setDeleteConfirmId(null)} style={{ background:"transparent", border:"1px solid #2a2820", borderRadius:6, color:"#6b6456", fontSize:12, fontFamily:"inherit", letterSpacing:"0.08em", padding:"8px 20px", cursor:"pointer" }}>
-                Abbrechen
-              </button>
-              <button onClick={() => handleDelete(deleteConfirmId)} style={{ background:"#c87070", border:"none", borderRadius:6, color:"#0a0908", fontSize:12, fontFamily:"inherit", fontWeight:"bold", letterSpacing:"0.08em", padding:"8px 20px", cursor:"pointer" }}>
-                Löschen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
