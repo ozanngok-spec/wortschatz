@@ -97,28 +97,119 @@ function SpeakBtn({ text, size = 13 }) {
 }
 
 function PronunciationPractice({ word }) {
-  const [state, setState] = useState("idle");
+  const [state, setState] = useState("idle"); // idle | listening | processing | done
   const [feedback, setFeedback] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [volume, setVolume] = useState(0);
   const recognitionRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const streamRef = useRef(null);
+  const hasResultRef = useRef(false);
 
-  const start = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setFeedback("Speech recognition not supported. Try Chrome."); setState("done"); return; }
-    const r = new SR();
-    r.lang = "de-DE"; r.interimResults = false; r.maxAlternatives = 1;
-    recognitionRef.current = r;
-    r.onresult = async (e) => {
-      const heard = e.results[0][0].transcript;
-      setTranscript(heard); setState("processing");
-      const fb = await fetchPronunciationFeedback(word, heard);
-      setFeedback(fb); setState("done");
-    };
-    r.onerror = () => { setFeedback("Couldn't hear anything. Please try again."); setState("done"); };
-    r.start(); setState("listening");
+  const stopAudio = () => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (audioCtxRef.current) audioCtxRef.current.close();
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    setVolume(0);
   };
 
-  const reset = () => { setState("idle"); setFeedback(""); setTranscript(""); };
+  const startVolumeMonitor = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const analyser = ctx.createAnalyser();
+      analyserRef.current = analyser;
+      analyser.fftSize = 256;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setVolume(Math.min(100, avg * 2.5));
+        animFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch(e) {}
+  };
+
+  const start = async () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setFeedback("Spracherkennung wird in diesem Browser nicht unterstützt. Bitte Chrome verwenden."); setState("done"); return; }
+    hasResultRef.current = false;
+    const r = new SR();
+    r.lang = "de-DE";
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.continuous = false;
+    recognitionRef.current = r;
+
+    r.onresult = async (e) => {
+      const heard = Array.from(e.results).map(r => r[0].transcript).join("");
+      if (e.results[e.results.length - 1].isFinal) {
+        hasResultRef.current = true;
+        setTranscript(heard);
+        stopAudio();
+        setState("processing");
+        const fb = await fetchPronunciationFeedback(word, heard);
+        setFeedback(fb);
+        setState("done");
+      } else {
+        setTranscript(heard); // show interim live
+      }
+    };
+
+    r.onerror = (e) => {
+      stopAudio();
+      if (e.error === "no-speech") {
+        setFeedback("Kein Ton erkannt. Bitte etwas lauter sprechen und erneut versuchen.");
+      } else if (e.error === "not-allowed") {
+        setFeedback("Mikrofonzugriff verweigert. Bitte Mikrofonberechtigung erlauben.");
+      } else {
+        setFeedback("Fehler bei der Aufnahme. Bitte erneut versuchen.");
+      }
+      setState("done");
+    };
+
+    r.onend = () => {
+      stopAudio();
+      if (!hasResultRef.current) {
+        setFeedback("Kein Ton erkannt. Bitte etwas lauter sprechen und erneut versuchen.");
+        setState("done");
+      }
+    };
+
+    // Give at least 4 seconds before recognition auto-stops
+    r.start();
+    setState("listening");
+    await startVolumeMonitor();
+
+    // Keep mic open for up to 8 seconds
+    setTimeout(() => {
+      if (recognitionRef.current && !hasResultRef.current) {
+        try { recognitionRef.current.stop(); } catch(e) {}
+      }
+    }, 8000);
+  };
+
+  const stop = () => {
+    try { recognitionRef.current?.stop(); } catch(e) {}
+    stopAudio();
+    if (!hasResultRef.current) setState("idle");
+  };
+
+  const reset = () => { setState("idle"); setFeedback(""); setTranscript(""); setVolume(0); };
+
+  // Volume bars: 8 bars, heights driven by volume
+  const bars = Array.from({ length: 8 }, (_, i) => {
+    const threshold = (i / 8) * 100;
+    const active = volume > threshold;
+    const h = 6 + i * 3;
+    return { h, active };
+  });
 
   return (
     <div style={{ marginTop:14, padding:"12px 14px", background:"#0a0908", borderRadius:6, border:"1px solid #1e1c18" }}>
@@ -129,19 +220,48 @@ function PronunciationPractice({ word }) {
         </button>
       )}
       {state === "listening" && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, color:"#c8a96e", fontSize:12 }}>
-          <span style={{ display:"inline-block", width:8, height:8, borderRadius:"50%", background:"#c87070" }}></span>
-          Spreche jetzt: <em>{word}</em>
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10 }}>
+            {/* Volume bars */}
+            <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:28 }}>
+              {bars.map((b, i) => (
+                <div key={i} style={{
+                  width:5, height:b.h,
+                  borderRadius:2,
+                  background: b.active ? (volume > 60 ? "#c8a96e" : "#7a9e6e") : "#1e1c18",
+                  transition:"background 0.08s"
+                }} />
+              ))}
+            </div>
+            <div style={{ fontSize:12, color:"#c8a96e" }}>
+              Spreche jetzt: <em style={{ color:"#e8e0d0" }}>{word}</em>
+            </div>
+            <button onClick={stop} style={{ marginLeft:"auto", background:"transparent", border:"1px solid #3a2820", borderRadius:4, color:"#c87070", fontSize:10, fontFamily:"inherit", padding:"3px 8px", cursor:"pointer" }}>
+              ⏹ Stop
+            </button>
+          </div>
+          {/* Live interim transcript */}
+          {transcript && (
+            <div style={{ fontSize:12, color:"#5a5448", fontStyle:"italic", minHeight:18 }}>
+              Gehört: <span style={{ color:"#8a7e6e" }}>{transcript}</span>
+            </div>
+          )}
+          <div style={{ fontSize:10, color:"#2e2c26", marginTop:6 }}>Sprich laut und deutlich — bis zu 8 Sekunden</div>
         </div>
       )}
-      {state === "processing" && <div style={{ color:"#5a5448", fontSize:12 }}>Analysiere Aussprache…</div>}
+      {state === "processing" && (
+        <div style={{ color:"#5a5448", fontSize:12 }}>Analysiere Aussprache…</div>
+      )}
       {state === "done" && (
         <div>
-          {transcript && <div style={{ fontSize:11, color:"#4a4840", marginBottom:6 }}>Gehört: <em style={{ color:"#6b6456" }}>"{transcript}"</em></div>}
+          {transcript && <div style={{ fontSize:11, color:"#4a4840", marginBottom:8 }}>Gehört: <em style={{ color:"#6b6456" }}>„{transcript}"</em></div>}
           <div style={{ fontSize:13, color:"#a09070", lineHeight:1.7, marginBottom:10 }}>{feedback}</div>
-          <button onClick={reset} style={{ background:"transparent", border:"1px solid #2a2820", borderRadius:4, color:"#5a5448", fontSize:10, fontFamily:"inherit", padding:"3px 10px", cursor:"pointer", letterSpacing:"0.06em" }}>⟳ Nochmal</button>
+          <button onClick={reset} style={{ background:"transparent", border:"1px solid #2a2820", borderRadius:4, color:"#5a5448", fontSize:10, fontFamily:"inherit", padding:"3px 10px", cursor:"pointer", letterSpacing:"0.06em" }}>
+            ⟳ Nochmal versuchen
+          </button>
         </div>
       )}
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
     </div>
   );
 }
